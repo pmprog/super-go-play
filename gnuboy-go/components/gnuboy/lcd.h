@@ -2,6 +2,8 @@
 #define __LCD_H__
 
 #include "defs.h"
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
 
 struct vissprite
 {
@@ -67,6 +69,8 @@ void lcdc_trans();
 void lcdc_change(byte b);
 void stat_write(byte b);
 void stat_trigger();
+
+uint16_t pal_getcolour(int palette, int colourindex);
 
 
 #endif

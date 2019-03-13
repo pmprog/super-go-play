@@ -438,6 +438,109 @@ static void DoMenuHomeNoSave()
     esp_restart();
 }
 
+
+void app_menu_loop()
+{
+    // Copy display
+    memcpy(menuFramebuffer, framebuffer, 160 * 144 * 2);
+
+    odroid_volume_level curvol = odroid_audio_volume_get();
+    odroid_audio_volume_set(ODROID_VOLUME_LEVEL0);  // mute
+
+    odroid_gamepad_state lastJoysticState;
+    odroid_input_gamepad_read(&lastJoysticState);
+    while (true)
+    {
+        odroid_gamepad_state joystick;
+        odroid_input_gamepad_read(&joystick);
+
+        // Leave menu 
+        if (!lastJoysticState.values[ODROID_INPUT_MENU] && joystick.values[ODROID_INPUT_MENU])
+        {
+            odroid_audio_volume_set(curvol);  // mute
+            return;
+        }
+
+        if (!lastJoysticState.values[ODROID_INPUT_VOLUME] && joystick.values[ODROID_INPUT_VOLUME])
+        {
+            odroid_audio_volume_mute();
+            printf("main: Volume=%d\n", odroid_audio_volume_get());
+            // Allow configure of audio, but remute whilst in menus
+            curvol = odroid_audio_volume_get();
+            odroid_audio_volume_set(ODROID_VOLUME_LEVEL0);
+        }
+
+        if (!lastJoysticState.values[ODROID_INPUT_UP] && joystick.values[ODROID_INPUT_UP])
+        {
+            odroid_audio_volume_increase();
+            printf("main: Volume=%d\n", odroid_audio_volume_get());
+            // Allow configure of audio, but remute whilst in menus
+            curvol = odroid_audio_volume_get();
+            odroid_audio_volume_set(ODROID_VOLUME_LEVEL0);
+        }
+
+        if (!lastJoysticState.values[ODROID_INPUT_DOWN] && joystick.values[ODROID_INPUT_DOWN])
+        {
+            odroid_audio_volume_decrease();
+            printf("main: Volume=%d\n", odroid_audio_volume_get());
+            // Allow configure of audio, but remute whilst in menus
+            curvol = odroid_audio_volume_get();
+            odroid_audio_volume_set(ODROID_VOLUME_LEVEL0);
+        }
+
+        // Scaling
+        if (!lastJoysticState.values[ODROID_INPUT_START] && joystick.values[ODROID_INPUT_START])
+        {
+            gpio_set_level(GPIO_NUM_2, 1);
+            DoMenuHome();
+            gpio_set_level(GPIO_NUM_2, 0);
+        }
+
+        // Scaling
+        if (!lastJoysticState.values[ODROID_INPUT_SELECT] && joystick.values[ODROID_INPUT_SELECT])
+        {
+            scaling_enabled = !scaling_enabled;
+            odroid_settings_ScaleDisabled_set(ODROID_SCALE_DISABLE_GB, scaling_enabled ? 0 : 1);
+        }
+
+		// Cycle through palets
+		if (!lastJoysticState.values[ODROID_INPUT_LEFT] && joystick.values[ODROID_INPUT_LEFT])
+        {
+			pal_next();
+			odroid_settings_GBPalette_set(pal_get());
+        }
+
+        if (!lastJoysticState.values[ODROID_INPUT_RIGHT] && joystick.values[ODROID_INPUT_RIGHT])
+        {
+            pal_previous();
+            odroid_settings_GBPalette_set(pal_get());
+        }
+
+        // Render the gameboy display
+        int currentpalette = pal_get();
+        for(int y = 0; y < 16; y++)
+        {
+            for(int x = 0; x < 16; x++ )
+            {
+                uint16_t dc = (uint16_t)pal_getcolour(currentpalette, 0);
+                if( x == 0 || x == 15 || (y % 4) == 0 || y == 15 )
+                {
+                    dc = (uint16_t)pal_getcolour(currentpalette, 2);
+                }
+                menuFramebuffer[ (y * 160) + x ] = dc;
+            }
+        }
+        xQueueSend(vidQueue, &menuFramebuffer, portMAX_DELAY);
+
+        // Keep audio from going
+        void* tempPtr = 0x1234;
+        xQueueSend(audioQueue, &tempPtr, portMAX_DELAY);
+
+        lastJoysticState = joystick;
+    }
+}
+
+
 void app_main(void)
 {
     printf("gnuboy (%s-%s).\n", COMPILEDATE, GITREV);
@@ -521,6 +624,7 @@ void app_main(void)
     // Allocate display buffers
     displayBuffer[0] = heap_caps_malloc(160 * 144 * 2, MALLOC_CAP_8BIT | MALLOC_CAP_DMA);
     displayBuffer[1] = heap_caps_malloc(160 * 144 * 2, MALLOC_CAP_8BIT | MALLOC_CAP_DMA);
+    menuFramebuffer = heap_caps_malloc(160 * 144 * 2, MALLOC_CAP_8BIT | MALLOC_CAP_DMA);
 
     if (displayBuffer[0] == 0 || displayBuffer[1] == 0)
         abort();
@@ -627,6 +731,13 @@ void app_main(void)
         odroid_gamepad_state joystick;
         odroid_input_gamepad_read(&joystick);
 
+        // Leave menu 
+        if (!lastJoysticState.values[ODROID_INPUT_MENU] && joystick.values[ODROID_INPUT_MENU])
+        {
+            app_menu_loop();
+        }
+
+        /*
         if (ignoreMenuButton)
         {
             ignoreMenuButton = lastJoysticState.values[ODROID_INPUT_MENU];
@@ -658,45 +769,8 @@ void app_main(void)
 
             gpio_set_level(GPIO_NUM_2, 0);
         }
+        */
 
-
-        if (!lastJoysticState.values[ODROID_INPUT_VOLUME] && joystick.values[ODROID_INPUT_VOLUME])
-        {
-            odroid_audio_volume_mute();
-            printf("main: Volume=%d\n", odroid_audio_volume_get());
-        }
-
-        if (joystick.values[ODROID_INPUT_VOLUME] && !lastJoysticState.values[ODROID_INPUT_UP] && joystick.values[ODROID_INPUT_UP])
-        {
-            odroid_audio_volume_increase();
-            printf("main: Volume=%d\n", odroid_audio_volume_get());
-        }
-
-        if (joystick.values[ODROID_INPUT_VOLUME] && !lastJoysticState.values[ODROID_INPUT_DOWN] && joystick.values[ODROID_INPUT_DOWN])
-        {
-            odroid_audio_volume_decrease();
-            printf("main: Volume=%d\n", odroid_audio_volume_get());
-        }
-
-        // Scaling
-        if (joystick.values[ODROID_INPUT_START] && !lastJoysticState.values[ODROID_INPUT_RIGHT] && joystick.values[ODROID_INPUT_RIGHT])
-        {
-            scaling_enabled = !scaling_enabled;
-            odroid_settings_ScaleDisabled_set(ODROID_SCALE_DISABLE_GB, scaling_enabled ? 0 : 1);
-        }
-
-		// Cycle through palets
-		if (joystick.values[ODROID_INPUT_SELECT] && !lastJoysticState.values[ODROID_INPUT_LEFT] && joystick.values[ODROID_INPUT_LEFT])
-        {
-			pal_next();
-			odroid_settings_GBPalette_set(pal_get());
-        }
-
-        if (joystick.values[ODROID_INPUT_SELECT] && !lastJoysticState.values[ODROID_INPUT_RIGHT] && joystick.values[ODROID_INPUT_RIGHT])
-        {
-            pal_previous();
-            odroid_settings_GBPalette_set(pal_get());
-        }
 
         pad_set(PAD_UP, joystick.values[ODROID_INPUT_UP]);
         pad_set(PAD_RIGHT, joystick.values[ODROID_INPUT_RIGHT]);
