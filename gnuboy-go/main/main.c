@@ -31,6 +31,7 @@
 #include <string.h>
 
 #include "hourglass_empty_black_48dp.h"
+#include "menutiles.h"
 
 #include "../components/odroid/odroid_settings.h"
 #include "../components/odroid/odroid_input.h"
@@ -148,9 +149,6 @@ void run_to_vblank()
     emu_step();
   }
 }
-
-
-uint16_t* menuFramebuffer = 0;
 
 volatile bool videoTaskIsRunning = false;
 bool scaling_enabled = true;
@@ -438,14 +436,51 @@ static void DoMenuHomeNoSave()
     esp_restart();
 }
 
+void app_menu_drawtile(int x, int y, uint8_t tile, uint16_t fc, uint16_t bc )
+{
+    for(int chy = 0; chy < 8; chy++)
+    {
+        uint8_t t = menutiles[tile][chy];
+
+        for(int chx = 0; chx < 8; chx++)
+        {
+            uint8_t c = (t >> (7 - chx)) & 0x01;
+            framebuffer[ ((y + chy) * 160) + (x + chx) ] = (c == 0 ? bc : fc);
+        }
+    }
+}
+
+int menu_selected_index = 0;
+
+void app_menu_redrawmenu()
+{
+    // Render the gameboy display
+    printf("menu:startrender\n");
+    int currentpalette = pal_get();
+    uint16_t currentcolours[4] = { pal_getcolour(currentpalette, 0), pal_getcolour(currentpalette, 1), pal_getcolour(currentpalette, 2), pal_getcolour(currentpalette, 3) };
+
+    for(int y = 0; y < 7; y++)
+    {
+        for(int x = 0; x < 10; x++ )
+        {
+            uint16_t fc = currentcolours[menufcmap[y][x]];
+            uint16_t bc = currentcolours[menubcmap[y][x]];
+            uint8_t tl = menumap[y][x];
+            if( x == 2 && menu_selected_index == y - 1 )
+            {
+                tl = 9;
+            }
+            app_menu_drawtile( 40 + (x * 8), 44 + (y * 8), tl, fc, bc );
+        }
+    }
+    printf("menu:vidQueue\n");
+    xQueueSend(vidQueue, &framebuffer, portMAX_DELAY);
+}
 
 void app_menu_loop()
 {
-    // Copy display
-    memcpy(menuFramebuffer, framebuffer, 160 * 144 * 2);
-
-    odroid_volume_level curvol = odroid_audio_volume_get();
-    odroid_audio_volume_set(ODROID_VOLUME_LEVEL0);  // mute
+    menu_selected_index = 4;
+    app_menu_redrawmenu();
 
     odroid_gamepad_state lastJoysticState;
     odroid_input_gamepad_read(&lastJoysticState);
@@ -457,7 +492,6 @@ void app_menu_loop()
         // Leave menu 
         if (!lastJoysticState.values[ODROID_INPUT_MENU] && joystick.values[ODROID_INPUT_MENU])
         {
-            odroid_audio_volume_set(curvol);  // mute
             return;
         }
 
@@ -465,11 +499,9 @@ void app_menu_loop()
         {
             odroid_audio_volume_mute();
             printf("main: Volume=%d\n", odroid_audio_volume_get());
-            // Allow configure of audio, but remute whilst in menus
-            curvol = odroid_audio_volume_get();
-            odroid_audio_volume_set(ODROID_VOLUME_LEVEL0);
         }
 
+        /*
         if (!lastJoysticState.values[ODROID_INPUT_UP] && joystick.values[ODROID_INPUT_UP])
         {
             odroid_audio_volume_increase();
@@ -501,6 +533,7 @@ void app_menu_loop()
         {
             scaling_enabled = !scaling_enabled;
             odroid_settings_ScaleDisabled_set(ODROID_SCALE_DISABLE_GB, scaling_enabled ? 0 : 1);
+            app_menu_redrawmenu();
         }
 
 		// Cycle through palets
@@ -508,34 +541,82 @@ void app_menu_loop()
         {
 			pal_next();
 			odroid_settings_GBPalette_set(pal_get());
+            app_menu_redrawmenu();
         }
 
         if (!lastJoysticState.values[ODROID_INPUT_RIGHT] && joystick.values[ODROID_INPUT_RIGHT])
         {
             pal_previous();
             odroid_settings_GBPalette_set(pal_get());
+            app_menu_redrawmenu();
+        }
+        */
+
+        if (!lastJoysticState.values[ODROID_INPUT_UP] && joystick.values[ODROID_INPUT_UP])
+        {
+            menu_selected_index = (menu_selected_index + 4) % 5;
+            app_menu_redrawmenu();
+        }
+        if (!lastJoysticState.values[ODROID_INPUT_DOWN] && joystick.values[ODROID_INPUT_DOWN])
+        {
+            menu_selected_index = (menu_selected_index + 1) % 5;
+            app_menu_redrawmenu();
         }
 
-        // Render the gameboy display
-        int currentpalette = pal_get();
-        for(int y = 0; y < 16; y++)
+        if (!lastJoysticState.values[ODROID_INPUT_A] && joystick.values[ODROID_INPUT_A])
         {
-            for(int x = 0; x < 16; x++ )
+            switch( menu_selected_index )
             {
-                uint16_t dc = (uint16_t)pal_getcolour(currentpalette, 0);
-                if( x == 0 || x == 15 || (y % 4) == 0 || y == 15 )
-                {
-                    dc = (uint16_t)pal_getcolour(currentpalette, 2);
-                }
-                menuFramebuffer[ (y * 160) + x ] = dc;
+                case 0:
+                    odroid_audio_volume_increase();
+                    printf("main: Volume=%d\n", odroid_audio_volume_get());
+                    break;
+                case 1:
+                    pal_next();
+                    odroid_settings_GBPalette_set(pal_get());
+                    app_menu_redrawmenu();
+                    break;
+                case 2:
+                    LoadState(rom.name);
+                    break;
+                case 3:
+                    SaveState();
+                    break;
+                case 4:
+                    gpio_set_level(GPIO_NUM_2, 1);
+                    DoMenuHomeNoSave();
+                    gpio_set_level(GPIO_NUM_2, 0);
+                    break;
             }
         }
-        xQueueSend(vidQueue, &menuFramebuffer, portMAX_DELAY);
+        if (!lastJoysticState.values[ODROID_INPUT_B] && joystick.values[ODROID_INPUT_B])
+        {
+            switch( menu_selected_index )
+            {
+                case 0:
+                    odroid_audio_volume_decrease();
+                    printf("main: Volume=%d\n", odroid_audio_volume_get());
+                    break;
+                case 1:
+                    pal_previous();
+                    odroid_settings_GBPalette_set(pal_get());
+                    app_menu_redrawmenu();
+                    break;
+                case 2:
+                    LoadState(rom.name);
+                    break;
+                case 3:
+                    SaveState();
+                    break;
+                case 4:
+                    gpio_set_level(GPIO_NUM_2, 1);
+                    DoMenuHomeNoSave();
+                    gpio_set_level(GPIO_NUM_2, 0);
+                    break;
+            }
+        }
 
-        // Keep audio from going
-        void* tempPtr = 0x1234;
-        xQueueSend(audioQueue, &tempPtr, portMAX_DELAY);
-
+        printf("menu:joystick\n");
         lastJoysticState = joystick;
     }
 }
@@ -624,7 +705,6 @@ void app_main(void)
     // Allocate display buffers
     displayBuffer[0] = heap_caps_malloc(160 * 144 * 2, MALLOC_CAP_8BIT | MALLOC_CAP_DMA);
     displayBuffer[1] = heap_caps_malloc(160 * 144 * 2, MALLOC_CAP_8BIT | MALLOC_CAP_DMA);
-    menuFramebuffer = heap_caps_malloc(160 * 144 * 2, MALLOC_CAP_8BIT | MALLOC_CAP_DMA);
 
     if (displayBuffer[0] == 0 || displayBuffer[1] == 0)
         abort();

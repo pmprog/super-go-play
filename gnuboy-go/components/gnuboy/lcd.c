@@ -889,8 +889,8 @@ uint16_t pal_getcolour(int palette, int colourindex)
 {
 	int c = palettes[palette][colourindex];
 
-	uint16_t r = (c & 0xf8) >> 3;
-	uint16_t g = (c & 0xf800) >> 6;
-	uint16_t b = (c & 0xf80000) >> 9;
-	return (uint16_t)(r | g | b);
+	uint16_t r = (uint16_t)(((uint32_t)c & 0xf8) >> 3);
+	uint16_t g = (uint16_t)(((uint32_t)c & 0xf800) >> 6);
+	uint16_t b = (uint16_t)(((uint32_t)c & 0xf80000) >> 9);
+	return (r | g | b);
 }
