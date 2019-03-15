@@ -885,12 +885,30 @@ void lcd_reset()
 	pal_dirty();
 }
 
-uint16_t pal_getcolour(int palette, int colourindex)
+uint16_t pal_getcolour(int palette, int colourindex, int format)
 {
 	int c = palettes[palette][colourindex];
+	uint16_t r = 0;
+	uint16_t g = 0;
+	uint16_t b = 0;
 
-	uint16_t r = (uint16_t)(((uint32_t)c & 0xf8) >> 3);
-	uint16_t g = (uint16_t)(((uint32_t)c & 0xf800) >> 6);
-	uint16_t b = (uint16_t)(((uint32_t)c & 0xf80000) >> 9);
+	switch(format)
+	{
+		case 0:
+			r = (uint16_t)(((uint32_t)c & 0xf8) >> 3);
+			g = (uint16_t)(((uint32_t)c & 0xf800) >> 6);
+			b = (uint16_t)(((uint32_t)c & 0xf80000) >> 9);
+			break;
+		case 1:
+			r = (uint16_t)(((uint32_t)c & 0xf8) >> 3);
+			g = (uint16_t)(((uint32_t)c & 0xfc00) >> 5);
+			b = (uint16_t)(((uint32_t)c & 0xf80000) >> 8);
+			break;
+		case 2:
+			r = (uint16_t)(((uint32_t)c & 0xf8) << 8);
+			g = (uint16_t)(((uint32_t)c & 0xf800) >> 6);
+			b = (uint16_t)(((uint32_t)c & 0xf80000) >> 19);
+			break;
+	}
 	return (r | g | b);
 }

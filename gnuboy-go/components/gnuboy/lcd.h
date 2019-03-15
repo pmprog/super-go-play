@@ -70,7 +70,7 @@ void lcdc_change(byte b);
 void stat_write(byte b);
 void stat_trigger();
 
-uint16_t pal_getcolour(int palette, int colourindex);
+uint16_t pal_getcolour(int palette, int colourindex, int format);
 
 
 #endif

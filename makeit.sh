@@ -24,11 +24,11 @@ if [ ! -f tile.raw ]; then
 fi
 
 echo "Compiling .fw"
-../odroid-go-firmware/tools/mkfw/mkfw "Super Go Play" tile.raw 0 16 1048576 springboard ripped/springboard.bin 0 17 1048576 nesemu nesemu-go.bin 0 18 1048576 gnuboy gnuboy-go.bin 0 19 2097152 smsplusgx smsplusgx-go.bin
-#../odroid-go-firmware/tools/mkfw/mkfw "Super Go Play" tile.raw 0 16 1048576 springboard ripped/springboard.bin 0 17 1048576 nesemu nesemu-go.bin 0 18 1048576 gnuboy gnuboy-go.bin
+#../odroid-go-firmware/tools/mkfw/mkfw "Super Go Play" tile.raw 0 16 1048576 springboard ripped/springboard.bin 0 17 1048576 nesemu nesemu-go.bin 0 18 1048576 gnuboy gnuboy-go.bin 0 19 2097152 smsplusgx smsplusgx-go.bin
+../odroid-go-firmware/tools/mkfw/mkfw "Super Go Play" tile.raw 0 16 1048576 springboard ripped/springboard.bin 0 17 1048576 nesemu nesemu-go.bin 0 18 1048576 gnuboy gnuboy-go.bin
 mv firmware.fw supergoplay.fw
-#rm /media/nas/Software/ODroid-GO/supergoplay.fw
-#cp supergoplay.fw /media/nas/Software/ODroid-GO
+rm /media/vault/Software/ODroid-GO/supergoplay.fw
+cp supergoplay.fw /media/vault/Software/ODroid-GO
 
 if [ ! -f nesemu-go.bin ]; then
 	echo "NES EMU failed to build"
